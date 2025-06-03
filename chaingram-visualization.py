@@ -1,20 +1,49 @@
+import json
+
 import nltk
 import numpy as np
-import pandas as pd
-from nltk import word_tokenize, ngrams
+from nltk import word_tokenize
 nltk.download('punkt_tab')
 from scipy.sparse import vstack
 from sklearn.feature_extraction.text import CountVectorizer
 
 import math
-import pickle
-import re
 
-import pyvis
-from matplotlib import pyplot as plt
+import re
 from pyvis.network import Network
 import networkx as nx
 from tqdm import tqdm
+
+from deep_translator import GoogleTranslator
+
+
+
+def translate_graph_nodes(G):
+    all_words = set()
+
+    for node in G.nodes:
+        words = node.split()
+        all_words.update(words)
+
+    translator = GoogleTranslator(source='sk', target='en')
+    translation_map = {}
+
+    for word in tqdm(all_words):
+        try:
+            translation_map[word] = translator.translate(word).lower()
+        except Exception as e:
+            print(f"Failed to translate '{word}': {e}")
+            translation_map[word] = word  # fallback
+
+    mapping = {}
+
+    for node in G.nodes:
+        words = node.split()
+        translated_words = [translation_map.get(w, w) for w in words]
+        translated_node = " ".join(translated_words)
+        mapping[node] = translated_node
+
+    return nx.relabel_nodes(G, mapping)
 
 def remove_node_and_connect(G, node_to_remove):
     if node_to_remove not in G:
@@ -51,10 +80,10 @@ def remove_least_important_nodes(G, keep_nodes_number, weight='weight'):
 
 
 def visualize_graph(subG, output_filename='graph.html'):
-    nt = Network('800px', '1400px', notebook=False, directed=True, )
+    nt = Network('800px', '1400px', notebook=False, directed=True)
 
     for node, node_attrs in subG.nodes(data=True):
-        nt.add_node(node, title=node, size=node_attrs.get('size', 10), color=node_attrs.get('color', '#97c2fc'), font={'size': 24} )
+        nt.add_node(node, title=node, size=node_attrs.get('size', 10), color=node_attrs.get('color', '#97c2fc'), font={'size': 20} )
 
     for source, target, attrs in subG.edges(data=True):
         nt.add_edge(source, target, value=attrs.get('weight', 1))
@@ -64,7 +93,7 @@ def visualize_graph(subG, output_filename='graph.html'):
 
 
 
-def build_graph3(data):
+def build_graph(data):
     G = nx.DiGraph()
     base_size = 10
 
@@ -293,35 +322,55 @@ def chaingram_visualization(ngram_list, texts, root_nodes=[], keep_nodes_number=
                          "total_counts": total_counts,
                          "term_counts": converted_term_counts})
 
-    G = build_graph3(data)
+    G = build_graph(data)
     if root_nodes is not None and root_nodes != []:
         G = build_subgraph(G, root_nodes)
 
     visualize_graph(remove_least_important_nodes(G, keep_nodes_number))
 
 
-#
-root_nodes = ['brown']
-texts_foxes = [
-    "A brown fox was seen leaping over brown water. The big brown fox runs in the forest. A big brown fox runs around with big brown hat and brown pants.",
-    "Near the river, the big brown fox jumps around with agility and grace."
-]
-ngram_list_foxes = [
-    "around",
-    "brown",
-    "jumps",
-    "around with",
-    "big brown",
-    "brown fox",
-    "brown wood",
-    "fox brown",
-    "jumps around",
-    "brown fox jumps",
-    "brown fox runs",
-    "huge brown fox",
-    "world is brown"
-]
-chaingram_visualization(ngram_list_foxes, texts_foxes)
-#chaingram_visualization(ngram_list_foxes, texts_foxes, root_nodes)
+def EXAMPLE_foxes():
+    texts_foxes = [
+        "A brown fox was seen leaping over brown water. The big brown fox runs in the forest. A big brown fox runs around with big brown hat and brown pants.",
+        "Near the river, the big brown fox jumps around with agility and grace."
+    ]
+    ngram_list_foxes = [
+        "around",
+        "brown",
+        "jumps",
+        "around with",
+        "big brown",
+        "brown fox",
+        "brown wood",
+        "fox brown",
+        "jumps around",
+        "brown fox jumps",
+        "brown fox runs",
+        "huge brown fox",
+        "world is brown"
+    ]
+    chaingram_visualization(ngram_list_foxes, texts_foxes)
+
+
+def EXAMPLE_PRECOMPUTED_CHAINGRAM_COUNTS_cybercrime(root_nodes, keep_nodes_number, translate_to_english=True):
+    with open("lawDB.cyber_terms_with_counts.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    G = build_graph(data)
+    if root_nodes is not None and root_nodes != []:
+        G = build_subgraph(G, root_nodes)
+    G = remove_least_important_nodes(G, keep_nodes_number)
+    if translate_to_english:
+        G = translate_graph_nodes(G)
+    visualize_graph(G)
+
+#EXAMPLE for the foxes texts
+EXAMPLE_foxes()
+
+
+# EXAMPLE of the phrase "the password" (in slovak language "heslo")
+root_nodes=["heslo"]
+EXAMPLE_PRECOMPUTED_CHAINGRAM_COUNTS_cybercrime(root_nodes, keep_nodes_number=15, translate_to_english=True)
+
 
 
